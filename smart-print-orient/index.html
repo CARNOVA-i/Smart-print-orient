@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Smart Print Orientation Analyzer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <style>
+      body {
+        margin: 0;
+        background: #0b1020;
+        color: #e6f0ff;
+        font-family: system-ui, sans-serif;
+        overflow: hidden;
+      }
+
+      #ui {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        z-index: 10;
+        background: rgba(18, 26, 51, 0.85);
+        backdrop-filter: blur(6px);
+        padding: 12px;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      }
+
+      /* ---------- UI polish ---------- */
+
+#ui {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  background: rgba(18, 26, 51, 0.85);
+  backdrop-filter: blur(8px);
+  padding: 12px;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  border: 1px solid rgba(142, 240, 255, 0.18);
+}
+
+.ui-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ui-label {
+  font-size: 12px;
+  opacity: 0.95;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Buttons / inputs */
+.btn {
+  appearance: none;
+  border: 1px solid rgba(142, 240, 255, 0.28);
+  background: rgba(11, 16, 32, 0.65);
+  color: #e6f0ff;
+  padding: 7px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.btn:hover {
+  border-color: rgba(142, 240, 255, 0.55);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0px);
+}
+
+.btn-ghost {
+  background: rgba(18, 26, 51, 0.25);
+}
+
+.select {
+  border: 1px solid rgba(142, 240, 255, 0.22);
+  background: rgba(11, 16, 32, 0.65);
+  color: #e6f0ff;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  outline: none;
+}
+
+/* ---------- Modal ---------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+}
+
+.modal.open {
+  display: block;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(6px);
+}
+
+.modal-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(560px, calc(100vw - 28px));
+  transform: translate(-50%, -50%);
+  background: rgba(18, 26, 51, 0.92);
+  border: 1px solid rgba(142, 240, 255, 0.20);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(142, 240, 255, 0.12);
+}
+
+.modal-kicker {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+  text-transform: uppercase;
+}
+
+.modal-title {
+  margin: 4px 0 0 0;
+  font-size: 18px;
+}
+
+.icon-btn {
+  border: 1px solid rgba(142, 240, 255, 0.18);
+  background: rgba(11, 16, 32, 0.45);
+  color: #e6f0ff;
+  border-radius: 12px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  border-color: rgba(142, 240, 255, 0.50);
+}
+
+.modal-body {
+  padding: 14px;
+}
+
+.p {
+  margin: 0 0 12px 0;
+  line-height: 1.35;
+  opacity: 0.95;
+}
+
+.callouts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.callout {
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(11, 16, 32, 0.55);
+  border: 1px solid rgba(142, 240, 255, 0.12);
+}
+
+.callout-title {
+  font-weight: 800;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.callout-text {
+  font-size: 12px;
+  opacity: 0.9;
+  line-height: 1.35;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(142, 240, 255, 0.12);
+  margin: 14px 0;
+}
+
+.tips-title {
+  font-weight: 800;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.ol {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  opacity: 0.95;
+  line-height: 1.5;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid rgba(142, 240, 255, 0.12);
+}
+
+.checkbox {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  opacity: 0.95;
+}
+
+.checkbox input {
+  transform: translateY(1px);
+}
+
+
+      input {
+        color: #e6f0ff;
+      }
+
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="ui">
+  <div class="ui-row">
+    <input type="file" id="fileInput" accept=".stl" />
+
+    <button id="reanalyzeBtn" type="button" class="btn">Re-analyze</button>
+    <button id="exportBtn" type="button" class="btn">Export STL</button>
+    <label class="ui-label">
+  Export:
+  <select id="exportMode" class="select">
+    <option value="shown" selected>As shown</option>
+    <option value="strength">Strength result</option>
+    <option value="supports">Supports result</option>
+  </select>
+</label>
+
+
+
+    <label class="ui-label">
+      Load:
+      <select id="loadDir" class="select">
+        <option value="principal" selected>Principal Axis (auto)</option>
+        <option value="+x">+X</option>
+        <option value="-x">-X</option>
+        <option value="+y">+Y</option>
+        <option value="-y">-Y</option>
+        <option value="+z">+Z</option>
+        <option value="-z">-Z</option>
+      </select>
+    </label>
+
+    <button id="helpBtn" type="button" class="btn btn-ghost" aria-haspopup="dialog" aria-controls="helpModal">
+      What am I seeing?
+    </button>
+  </div>
+</div>
+
+<!-- Help overlay (modal) -->
+<div id="helpModal" class="modal" aria-hidden="true">
+  <div class="modal-backdrop" data-close="true"></div>
+
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <div class="modal-header">
+      <div>
+        <div class="modal-kicker">Smart Print Orientation Analyzer</div>
+        <h2 id="helpTitle" class="modal-title">What am I seeing?</h2>
+      </div>
+
+      <button id="helpClose" type="button" class="icon-btn" aria-label="Close help">
+        ✕
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <p class="p">
+        This tool analyzes your 3D model and recommends a print orientation based on real mechanical tradeoffs.
+      </p>
+
+      <div class="callouts">
+        <div class="callout">
+          <div class="callout-title">Grid</div>
+          <div class="callout-text">Represents the print bed.</div>
+        </div>
+
+        <div class="callout">
+          <div class="callout-title">Model rotation</div>
+          <div class="callout-text">
+            The model snaps to the best-scoring orientation for the selected goal.
+          </div>
+        </div>
+
+        <div class="callout">
+          <div class="callout-title">Red arrow</div>
+          <div class="callout-text">
+            Shows the chosen load direction after the model has been rotated.
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="tips">
+        <div class="tips-title">Try this</div>
+        <ol class="ol">
+          <li>Change the <b>Load</b> selector</li>
+          <li>Click <b>Re-analyze</b></li>
+          <li>Watch the model and arrow update together</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <label class="checkbox">
+        <input id="dontShowAgain" type="checkbox" />
+        <span>Don’t show again</span>
+      </label>
+
+      <button id="helpOk" type="button" class="btn">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- STL Inspector HUD -->
+<div id="inspectorHud" class="inspectorHud" hidden>
+  <div class="inspectorHudHead">
+    <div><b>STL Inspector</b> <span id="inspectorPills"></span></div>
+    <button id="inspectorToggleBtn" class="inspectorMiniBtn" title="Collapse">–</button>
+  </div>
+
+  <div id="inspectorHudBody" class="inspectorHudBody">
+    <div id="inspectorLine1" class="inspectorLine"></div>
+
+  <div id="inspectorSummary" class="inspectorSummary"></div>
+
+  <div id="inspectorWarnings" class="inspectorWarnings"></div>
+
+  <div class="inspectorRawHeader">
+    <span class="inspectorRawTitle">Raw</span>
+    <button id="inspectorRawBtn" class="inspectorMiniBtn" type="button">Show</button>
+  </div>
+
+  <pre id="inspectorJson" class="inspectorJson" style="display:none;"></pre>
+</div>
+
+</div>
+
+
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
