@@ -26,6 +26,9 @@ let currentViewQuat = new THREE.Quaternion(); // tracks what is displayed
 let lastFocusEl = null;
 
 let viewMode = "strength"; // "strength" | "supports"
+let rankedCandidatesStrength = [];
+let rankedCandidatesSupports = [];
+let currentCandidateIndex = 0;
 
 
 function openHelp() {
@@ -71,6 +74,10 @@ const qZupToYup = new THREE.Quaternion().setFromEuler(
 );
 
 
+
+const qYupToZup = qZupToYup.clone().invert();
+
+let hasManualViewRotation = false;
 
 function getViewerQuaternion(zUpQuat) {
   return qZupToYup.clone().multiply(zUpQuat);
@@ -129,10 +136,74 @@ function getExportMode() {
     case "shown":
     case "current":
     case "view":
-      return viewMode;
+      return "view";
     default:
       return viewMode;
   }
+}
+
+function getActiveRankedCandidates() {
+  return viewMode === "supports" ? rankedCandidatesSupports : rankedCandidatesStrength;
+}
+
+function formatCandidateScore(item) {
+  if (!item) return "STR - | SUP -";
+  return `STR ${Math.round(item.strengthScore)} | SUP ${Math.round(item.supportsScore)}`;
+}
+
+function updateCandidateUI() {
+  const list = getActiveRankedCandidates();
+  const item = list[currentCandidateIndex] ?? null;
+  const prevBtn = document.getElementById("candidatePrevBtn");
+  const nextBtn = document.getElementById("candidateNextBtn");
+  const indexLabel = document.getElementById("candidateIndexLabel");
+  const scoreLabel = document.getElementById("candidateScoreLabel");
+
+  if (indexLabel) {
+    indexLabel.textContent = list.length ? `Cand ${currentCandidateIndex + 1}/${list.length}` : "Cand -/-";
+  }
+
+  const cand = list[currentCandidateIndex] ?? null;
+  
+  if (scoreLabel) {
+    scoreLabel.textContent = cand
+      ? `STR ${cand.strengthScore?.toFixed(1)} | SUP ${cand.supportsScore?.toFixed(0)}`
+      : "STR - | SUP -";
+  }
+
+  if (prevBtn) prevBtn.disabled = list.length === 0 || currentCandidateIndex <= 0;
+  if (nextBtn) nextBtn.disabled = list.length === 0 || currentCandidateIndex >= list.length - 1;
+}
+
+function showCandidate(index) {
+  const list = getActiveRankedCandidates();
+  if (!list.length) {
+    currentCandidateIndex = 0;
+    updateCandidateUI();
+    return;
+  }
+
+  currentCandidateIndex = Math.max(0, Math.min(index, list.length - 1));
+  applyViewQuaternion(list[currentCandidateIndex].quaternion);
+  updateCandidateUI();
+}
+
+function rebuildRankedCandidates(strengthScores, supportsScores) {
+  const strengthByIdx = new Map(strengthScores.map((item) => [item.idx, item.score]));
+  const supportsByIdx = new Map(supportsScores.map((item) => [item.idx, item.score]));
+
+  const buildRankedList = (sorted) =>
+    sorted.slice(0, 5).map((item, rank) => ({
+      rank: rank + 1,
+      quaternion: item.quat?.clone?.() || null,
+      strengthScore: strengthByIdx.get(item.idx),
+      supportsScore: supportsByIdx.get(item.idx),
+    }));
+
+  rankedCandidatesStrength = buildRankedList(strengthScores);
+  rankedCandidatesSupports = buildRankedList(supportsScores);
+  currentCandidateIndex = 0;
+  updateCandidateUI();
 }
 
 function renderInspectorHUD(rep) {
@@ -235,6 +306,8 @@ toggleViewBtn?.addEventListener("click", () => {
 function applyViewQuaternion(q) {
   if (!viewMesh) return;
 
+  hasManualViewRotation = false;
+
   // Convert from Z-up (solver/export) to Y-up (viewer)
   currentViewQuat.copy(getViewerQuaternion(q));
 
@@ -244,6 +317,12 @@ function applyViewQuaternion(q) {
 
   // Apply rotation
   viewMesh.setRotationFromQuaternion(currentViewQuat);
+  reflowViewMesh();
+}
+
+function reflowViewMesh() {
+  if (!viewMesh) return;
+
   viewMesh.updateMatrixWorld(true);
 
   // Ground to build plate (Y up)
@@ -263,6 +342,55 @@ function applyViewQuaternion(q) {
   const loadAxis = getLoadAxisFromUI(lastAnalysisData);
   const loadWorld = loadAxis.clone().applyQuaternion(currentViewQuat).normalize();
   updateLoadArrow(loadWorld, viewMesh);
+}
+
+function rotateView(axis, radians) {
+  if (!viewMesh) return;
+
+  const q = new THREE.Quaternion();
+  const v = new THREE.Vector3(axis[0], axis[1], axis[2]);
+
+  q.setFromAxisAngle(v, radians);
+  viewMesh.quaternion.premultiply(q);
+  currentViewQuat.copy(viewMesh.quaternion).normalize();
+  hasManualViewRotation = true;
+  reflowViewMesh();
+}
+
+function getCurrentViewExportQuaternion() {
+  if (!viewMesh) return null;
+  return qYupToZup.clone().multiply(viewMesh.quaternion.clone()).normalize();
+}
+
+function ensureManualRotateUI() {
+  if (document.getElementById("rotXPlus")) return;
+
+  const container = document.createElement("div");
+  container.className = "manual-rotate";
+  container.innerHTML = `
+    <button id="rotXPlus" type="button">X+</button>
+    <button id="rotXMinus" type="button">X-</button>
+    <button id="rotYPlus" type="button">Y+</button>
+    <button id="rotYMinus" type="button">Y-</button>
+    <button id="rotZPlus" type="button">Z+</button>
+    <button id="rotZMinus" type="button">Z-</button>
+    <button id="rotReset" type="button">Reset</button>
+  `;
+
+  const anchor =
+    document.getElementById("toggleViewBtn") ||
+    document.getElementById("exportBtn") ||
+    document.getElementById("fileInput");
+
+  const parent = anchor?.parentElement || document.body;
+  parent.appendChild(container);
+}
+
+
+function getRotateStepRadians() {
+  const sel = document.getElementById("rotateStep");
+  const deg = Number(sel?.value || 15);
+  return deg * Math.PI / 180;
 }
 
 
@@ -370,9 +498,16 @@ function exportSTL() {
 
   if (!currentMesh) return;
 
+  if (mode === "view") {
+    const exportQuat = getCurrentViewExportQuaternion();
+    if (exportQuat) exportBakedQuaternion(exportQuat, "view");
+    return;
+  }
+
   if (mode === "strength") {
     exportBakedQuaternion(bestQuatStrength, "strength");
-  } else if (mode === "supports") {
+  } 
+  else if (mode === "supports") {
     exportBakedQuaternion(bestQuatSupports, "supports");
   }
 }
@@ -387,10 +522,33 @@ document.getElementById("toggleViewBtn")?.addEventListener("click", () => {
   const btn = document.getElementById("toggleViewBtn");
   if (btn) btn.textContent = `View: ${viewMode === "strength" ? "Strength" : "Supports"}`;
 
-  applyViewQuaternion(viewMode === "strength" ? bestQuatStrength : bestQuatSupports);
+  showCandidate(0);
 });
 
+ensureManualRotateUI();
+updateCandidateUI();
 
+document.getElementById("rotXPlus").onclick = () => rotateView([1, 0, 0],  getRotateStepRadians());
+document.getElementById("rotXMinus").onclick = () => rotateView([1, 0, 0], -getRotateStepRadians());
+
+document.getElementById("rotYPlus").onclick = () => rotateView([0, 1, 0],  getRotateStepRadians());
+document.getElementById("rotYMinus").onclick = () => rotateView([0, 1, 0], -getRotateStepRadians());
+
+document.getElementById("rotZPlus").onclick = () => rotateView([0, 0, 1],  getRotateStepRadians());
+document.getElementById("rotZMinus").onclick = () => rotateView([0, 0, 1], -getRotateStepRadians());
+
+document.getElementById("rotReset")?.addEventListener("click", () => {
+  const quat = getCurrentAnalysisQuaternion();
+  if (quat) applyViewQuaternion(quat);
+});
+
+document.getElementById("candidatePrevBtn")?.addEventListener("click", () => {
+  showCandidate(currentCandidateIndex - 1);
+});
+
+document.getElementById("candidateNextBtn")?.addEventListener("click", () => {
+  showCandidate(currentCandidateIndex + 1);
+});
 
 
 // ---------------------------------------- EXPORT BUTTON ------------------------------
@@ -586,6 +744,7 @@ function loadSTL(buffer) {
   });
   supportsScores.sort((a, b) => a.score - b.score);
   bestQuatSupports = supportsScores[0].quat.clone();
+  rebuildRankedCandidates(strengthScores, supportsScores);
 
   console.log("Best supports/overhang scores (lower is better):");
   console.table(supportsScores.slice(0, 5));
@@ -628,8 +787,7 @@ if (btn) btn.textContent = "View: Strength";
 
 
   // Apply view based on viewMode
-  const defaultQuat = getCurrentAnalysisQuaternion();
-  applyViewQuaternion(defaultQuat);
+  showCandidate(0);
 
   // Auto-frame camera
   const box = new THREE.Box3().setFromObject(viewMesh);
@@ -657,6 +815,11 @@ function clearBuildplate() {
   baseGeometry = null;
   bestQuatStrength = null;
   bestQuatSupports = null;
+  hasManualViewRotation = false;
+  rankedCandidatesStrength = [];
+  rankedCandidatesSupports = [];
+  currentCandidateIndex = 0;
+  updateCandidateUI();
 
   // Clear inspector HUD
   const hud = document.getElementById("inspectorHud");
