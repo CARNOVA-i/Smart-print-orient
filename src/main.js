@@ -78,7 +78,7 @@ function closeHelp() {
   helpModal.setAttribute("hidden", "");
 
   if (dontShowAgain?.checked) {
-    localStorage.setItem("spoa_hide_help", "1");
+    localStorage.setItem("pc_help_seen_v1", "1");
   }
 }
 
@@ -136,6 +136,7 @@ function getCurrentAnalysisQuaternion() {
 
 function getLoadAxisSelectorValue() {
   const el =
+    document.getElementById("loadAxisSelect") ||
     document.getElementById("loadDir") ||
     document.getElementById("loadAxis") ||
     document.querySelector("[name='loadDir']") ||
@@ -919,6 +920,48 @@ document.getElementById("fileInput").addEventListener("change", (event) => {
 });
 
 
+function quickOrientationRiskCheck() {
+
+  if (!lastAnalysisData) return;
+
+  const rotMatrix = new THREE.Matrix4().identity();
+
+  const supportScore = scoreOverhang(
+    lastAnalysisData.triangles,
+    rotMatrix
+  );
+
+  // crude heuristic threshold
+  if (supportScore > 250000) {
+    showOrientationWarning();
+  }
+
+}
+
+
+function showOrientationWarning() {
+
+  if (document.getElementById("orientationWarn")) return;
+
+  const warn = document.createElement("div");
+  warn.id = "orientationWarn";
+  warn.className = "orientationWarn";
+
+  warn.innerHTML = `
+    ⚠ Current orientation may require heavy supports.
+    <button id="warnAnalyze">Analyze Orientation</button>
+  `;
+
+  document.body.appendChild(warn);
+
+  document.getElementById("warnAnalyze")?.addEventListener("click", () => {
+    document.getElementById("analyzeOrientationBtn")?.click();
+    warn.remove();
+  });
+
+}
+
+
 // ---------------------- LOAD AND ANALYZE STL ----------------------
 function loadSTL(buffer) {
   lastSTLBuffer = buffer;
@@ -935,6 +978,9 @@ function loadSTL(buffer) {
   // Analysis data
   const analysisData = preprocessGeometry(baseGeometry);
   lastAnalysisData = analysisData;
+
+  // Quick orientation risk check
+  quickOrientationRiskCheck();
 
   // Inspector must run AFTER analysisData exists
   const inspector = computeInspectorReport(analysisData);
@@ -1104,3 +1150,9 @@ document.getElementById("fileInput")?.addEventListener("change", (e) => {
   const f = e.target.files?.[0];
   if (fileNameEl) fileNameEl.textContent = f ? f.name : "No file";
 });
+
+
+// AUTO SHOW HELP ON FIRST VISIT
+if (!localStorage.getItem("pc_help_seen_v1")) {
+  openHelp();
+}

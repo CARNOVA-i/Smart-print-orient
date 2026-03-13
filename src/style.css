@@ -392,3 +392,25 @@ select option{
     white-space:normal;
   }
 }
+
+
+
+.orientationWarn {
+
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  background: rgba(20,30,55,.9);
+  border: 1px solid rgba(255,180,80,.6);
+
+  padding: 10px 14px;
+  border-radius: 12px;
+
+  font-size: 13px;
+  color: #ffd9a0;
+
+  box-shadow: 0 10px 30px rgba(0,0,0,.4);
+
+}
